@@ -1,0 +1,16 @@
+# Nixpacks configuration for Dokploy deployment (Frontend)
+
+[providers]
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "pnpm"]
+
+[phases.install]
+cmds = ["pnpm install"]
+
+[phases.build]
+cmds = ["pnpm run build"]
+
+[start]
+cmd = "npx -y serve -s dist -l 3000"
