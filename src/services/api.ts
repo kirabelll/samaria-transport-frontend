@@ -1,6 +1,8 @@
 import axios from 'axios';
+const rawBase = import.meta.env.VITE_API_URL || '';
+const baseURL = rawBase ? (rawBase.endsWith('/api') ? rawBase : `${rawBase.replace(/\/$/, '')}/api`) : '/api';
+const api = axios.create({ baseURL });
 
-const api = axios.create({ baseURL: '/api' });
 
 api.interceptors.request.use(cfg => {
   const raw = localStorage.getItem('wonde-erp-auth');
