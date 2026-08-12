@@ -1,13 +1,12 @@
-# Nixpacks configuration for Dokploy deployment (Frontend)
-
-[providers]
 providers = ["node"]
+
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "pnpm"]
 
 [phases.install]
-cmds = ["pnpm install"]
+cmds = ["pnpm install --no-frozen-lockfile"]
+
 
 [phases.build]
 cmds = ["pnpm run build"]
