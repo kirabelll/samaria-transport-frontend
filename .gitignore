@@ -42,3 +42,4 @@ dist-ssr/
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+pnpm-workspace.yaml
