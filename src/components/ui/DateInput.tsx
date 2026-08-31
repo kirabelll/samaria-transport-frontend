@@ -27,7 +27,7 @@ interface Props {
 
 export default function DateInput({ value, onChange, className, required, min, max }: Props) {
   return (
-    <div className="relative">
+    <div className="relative space-y-1">
       <input
         type="date"
         value={value}
@@ -39,9 +39,9 @@ export default function DateInput({ value, onChange, className, required, min, m
         lang="en"
       />
       {value && (
-        <div className="flex gap-2 mt-0.5 text-[10px]">
-          <span className="text-gray-500">{formatEnglish(value)}</span>
-          <span className="text-blue-600 font-medium">{ethLabel(value)}</span>
+        <div className="flex items-center gap-2 px-1 text-[11px]">
+          <span className="text-muted-foreground">{formatEnglish(value)}</span>
+          <span className="text-primary font-medium">{ethLabel(value)}</span>
         </div>
       )}
     </div>

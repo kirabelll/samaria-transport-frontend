@@ -1,65 +1,81 @@
-import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import { useIdleTimeout } from '../../hooks/useIdleTimeout';
 import { useAuthStore } from '../../store/auth';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LogOut } from 'lucide-react';
+import { SidebarProvider, useSidebar } from '../../context/SidebarContext';
 
-export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
+function LayoutContent() {
+  const { isMobileOpen, setMobileOpen, toggleMobile } = useSidebar();
   const { logout } = useAuthStore();
   const { showWarning, secondsLeft, stayLoggedIn } = useIdleTimeout();
 
-  const closeSidebar = () => setSidebarOpen(false);
+  const closeSidebar = () => setMobileOpen(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={closeSidebar} />
+    <div className="flex h-screen overflow-hidden bg-background text-foreground antialiased">
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden animate-fadeIn"
+          onClick={closeSidebar}
+        />
       )}
 
-      <div className={`
-        fixed inset-y-0 left-0 z-40 lg:static lg:z-auto
-        transform transition-transform duration-200 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      {/* Sidebar Navigation */}
+      <div
+        className={`
+        fixed inset-y-0 left-0 z-50 lg:static lg:z-auto
+        transform transition-transform duration-300 ease-in-out
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}
+      >
         <Sidebar onNavigate={closeSidebar} />
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TopBar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6">
+      {/* Main Workspace */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-background transition-all duration-300">
+        <TopBar onMenuToggle={toggleMobile} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
           <Outlet />
         </main>
       </div>
 
-      {/* Idle-timeout warning overlay */}
+      {/* Idle-timeout warning modal */}
       {showWarning && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-amber-600" />
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-card text-card-foreground border border-border rounded-2xl shadow-modal max-w-md w-full p-6 animate-zoomIn">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-800">Session expiring</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  You will be logged out in <strong>{secondsLeft}s</strong> due to inactivity.
+                <h3 className="text-base font-bold text-foreground font-heading">
+                  Session Timeout Warning
+                </h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                  You will be automatically logged out in{' '}
+                  <span className="font-bold text-destructive font-mono">{secondsLeft}s</span> due
+                  to inactivity.
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-5">
+
+            <div className="flex justify-end items-center gap-2.5 mt-6 pt-4 border-t border-border">
               <button
-                onClick={() => { logout(); window.location.href = '/login'; }}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                onClick={() => {
+                  logout();
+                  window.location.href = '/login';
+                }}
+                className="btn btn-secondary text-xs sm:text-sm"
               >
-                Log out now
+                <LogOut className="w-3.5 h-3.5 mr-1" />
+                Log out
               </button>
               <button
                 onClick={stayLoggedIn}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="btn btn-primary text-xs sm:text-sm"
               >
                 Stay logged in
               </button>
@@ -68,5 +84,13 @@ export default function Layout() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Layout() {
+  return (
+    <SidebarProvider>
+      <LayoutContent />
+    </SidebarProvider>
   );
 }

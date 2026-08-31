@@ -1,33 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Menu, Search, Loader2 } from 'lucide-react';
+import { Bell, Menu, Search, Loader2, Calendar, PanelLeft } from 'lucide-react';
 import { searchApi } from '../../services/api';
+import ThemeSwitch from '../ui/ThemeSwitch';
+import { useSidebar } from '../../context/SidebarContext';
 
 const titles: Record<string, string> = {
-  '/dashboard': 'Dashboard', '/trips': 'Trip Management',
-  '/orders': 'Customer Orders', '/vehicles': 'Fleet Management',
-  '/maintenance': 'Maintenance', '/inventory': 'Inventory & Store',
-  '/procurement': 'Procurement', '/cashier': 'Cashier & Finance',
-  '/rental': 'Rental Operations', '/customers': 'Customers',
-  '/employees': 'Employees', '/hr': 'Attendance',
-  '/payroll': 'Payroll', '/reports': 'Reports & Analytics',
-  '/users': 'User Management', '/tracking': 'Live Tracking',
-  '/telegram': 'Telegram', '/permissions': 'Permissions',
-  '/handovers': 'Handovers', '/driver-ledger': 'Driver Ledger',
-  '/profitability': 'Profitability', '/compliance': 'Compliance',
-  '/audit': 'Audit Trail', '/payment-requests': 'Payment Requests',
+  '/dashboard': 'Dashboard',
+  '/dispatch': 'Dispatch Board',
+  '/trips': 'Trip Management',
+  '/orders': 'Customer Orders',
+  '/vehicles': 'Fleet Management',
+  '/fleet-board': 'Fleet Board',
+  '/maintenance': 'Maintenance',
+  '/fuel-control': 'Fuel Control',
+  '/inventory': 'Inventory & Store',
+  '/procurement': 'Procurement',
+  '/procurement-report': 'Procurement Report',
+  '/cashier': 'Cashier & Finance',
+  '/rental': 'Rental Operations',
+  '/customers': 'Customers',
+  '/employees': 'Employees',
+  '/hr': 'Attendance & HR',
+  '/payroll': 'Payroll',
+  '/reports': 'Reports & Analytics',
+  '/users': 'User Management',
+  '/tracking': 'Live Tracking',
+  '/telegram': 'Telegram Notifications',
+  '/permissions': 'Role Permissions',
+  '/handovers': 'Truck Handovers',
+  '/driver-ledger': 'Driver Ledger',
+  '/driver-scoring': 'Driver Scoring',
+  '/profitability': 'Profitability Analytics',
+  '/compliance': 'Fleet Compliance',
+  '/audit': 'Audit Trail',
+  '/payment-requests': 'Payment Requests',
+  '/accounting': 'Accounting & Ledger',
+  '/settlements': 'Trip Settlements',
+  '/accidents': 'Accident Records',
+  '/revenue-share': 'Revenue Sharing',
+  '/brokers': 'Brokers Directory',
+  '/company-docs': 'Company Documents',
+  '/approvals': 'Approval Requests',
+  '/alerts': 'System Alerts',
 };
 
 export default function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const title = titles[pathname] || 'Wonde ERP';
+  const { toggleSidebar } = useSidebar();
 
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut Ctrl+K / Cmd+K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -54,77 +95,137 @@ export default function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) 
   }, [q]);
 
   const pickResult = (r: any) => {
-    setOpen(false); setQ('');
+    setOpen(false);
+    setQ('');
     navigate(`${r.url}?ref=${encodeURIComponent(r.label)}`);
   };
 
-  const typeColor = (t: string) => {
+  const typeBadgeStyle = (t: string) => {
     switch (t) {
-      case 'Trip': return 'bg-blue-100 text-blue-700';
-      case 'Order': return 'bg-emerald-100 text-emerald-700';
-      case 'PO': return 'bg-purple-100 text-purple-700';
-      case 'WO': return 'bg-amber-100 text-amber-700';
-      case 'PaymentReq': return 'bg-rose-100 text-rose-700';
-      case 'Settlement': return 'bg-indigo-100 text-indigo-700';
-      case 'Vehicle': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'Trip': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+      case 'Order': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+      case 'PO': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
+      case 'WO': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+      case 'PaymentReq': return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+      case 'Settlement': return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20';
+      case 'Vehicle': return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20';
+      default: return 'bg-muted text-muted-foreground border-border';
     }
   };
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <button onClick={onMenuToggle} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 lg:hidden">
-          <Menu className="w-5 h-5" />
+    <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 sm:px-6 flex-shrink-0 gap-3 sticky top-0 z-30">
+      {/* Title / Hamburger / Collapse */}
+      <div className="flex items-center gap-2.5 min-w-0">
+        <button
+          onClick={onMenuToggle}
+          aria-label="Open menu"
+          className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground lg:hidden border border-border/50"
+        >
+          <Menu className="w-4 h-4" />
         </button>
-        <h1 className="text-base font-semibold text-gray-800 truncate">{title}</h1>
+
+        <button
+          onClick={toggleSidebar}
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar (Ctrl+B)"
+          className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground hidden lg:flex border border-border/50 transition-colors"
+        >
+          <PanelLeft className="w-4 h-4" />
+        </button>
+
+        <div className="h-4 w-px bg-border hidden lg:block mx-1" />
+
+        <div>
+          <h1 className="text-base sm:text-lg font-bold text-foreground font-heading tracking-tight truncate">
+            {title}
+          </h1>
+        </div>
       </div>
 
-      {/* Global reference search */}
+      {/* Global Reference Search */}
       <div className="flex-1 max-w-md relative hidden md:block" ref={wrapRef}>
-        <div className="relative">
-          {loading
-            ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
-            : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />}
+        <div className="relative flex items-center">
+          {loading ? (
+            <Loader2 className="absolute left-3 w-4 h-4 text-muted-foreground animate-spin" />
+          ) : (
+            <Search className="absolute left-3 w-4 h-4 text-muted-foreground" />
+          )}
           <input
+            ref={inputRef}
             value={q}
             onChange={e => setQ(e.target.value)}
             onFocus={() => results.length > 0 && setOpen(true)}
-            placeholder="Search trip, order, PO, WO, invoice, plate…"
-            className="w-full pl-9 pr-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Search trips, orders, POs, vehicles, invoices..."
+            className="w-full pl-9 pr-14 py-2 text-xs sm:text-sm bg-muted/50 border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring transition-all"
           />
+          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            <span className="text-xs">Ctrl</span>K
+          </kbd>
         </div>
+
+        {/* Search Results Dropdown */}
         {open && results.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-96 overflow-y-auto z-50">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-popover text-popover-foreground border border-border rounded-xl shadow-dropdown max-h-96 overflow-y-auto z-50 p-1 divide-y divide-border/50 animate-slideDown">
+            <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Search Results
+            </div>
             {results.map((r, i) => (
               <button
                 key={i}
                 onClick={() => pickResult(r)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-accent rounded-lg transition-colors group"
               >
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${typeColor(r.type)}`}>{r.type}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${typeBadgeStyle(r.type)}`}>
+                  {r.type}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-800 truncate">{r.label}</div>
-                  {r.subtitle && <div className="text-xs text-gray-500 truncate">{r.subtitle}</div>}
+                  <div className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                    {r.label}
+                  </div>
+                  {r.subtitle && (
+                    <div className="text-[11px] text-muted-foreground truncate">{r.subtitle}</div>
+                  )}
                 </div>
               </button>
             ))}
           </div>
         )}
+
         {open && q.length >= 2 && !loading && results.length === 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg p-4 text-sm text-gray-500 text-center z-50">
-            No matches for "<strong>{q}</strong>"
+          <div className="absolute top-full left-0 right-0 mt-2 bg-popover border border-border rounded-xl shadow-dropdown p-4 text-xs sm:text-sm text-muted-foreground text-center z-50">
+            No matches found for "<span className="text-foreground font-semibold">{q}</span>"
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-          <Bell className="w-5 h-5" />
+      {/* Right Controls */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Date Display */}
+        <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 text-muted-foreground text-xs font-medium border border-border/50">
+          <Calendar className="w-3.5 h-3.5" />
+          <span>
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </span>
+        </div>
+
+        {/* Theme Switcher */}
+        <ThemeSwitch />
+
+        {/* Notification Bell */}
+        <button
+          className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent border border-transparent hover:border-border transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
+          title="Notifications"
+          aria-label="Notifications"
+          onClick={() => navigate('/alerts')}
+        >
+          <Bell className="w-4 h-4" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-card animate-pulse" />
         </button>
-        <span className="text-xs text-gray-400 hidden sm:inline">
-          {new Date().toLocaleDateString('en-ET', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-        </span>
       </div>
     </header>
   );
