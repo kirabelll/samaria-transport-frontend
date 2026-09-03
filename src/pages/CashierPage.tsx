@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, DollarSign, Fuel, AlertTriangle, Landmark, Send, Clock, ArrowRightLeft, CheckCircle, XCircle, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, DollarSign, Fuel, AlertTriangle, Landmark, Send, Clock, ArrowRightLeft, CheckCircle, XCircle, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { cashierApi, cashTransferApi, employeeApi, vehicleApi, mainCashApi, authApi } from '../services/api';
 import { formatDualDate } from '../utils/ethCalendar';
 import Modal from '../components/ui/Modal';
@@ -63,7 +63,7 @@ export default function CashierPage() {
   const load = () => {
     setLoading(true);
     let promise: Promise<any>;
-    if (tab === 'transactions') promise = cashierApi.listTransactions();
+    if (tab === 'transactions') promise = cashierApi.listTransactions({ cashierId: cashier?.id });
     else if (tab === 'advances') promise = cashierApi.listAdvances();
     else promise = cashierApi.listFuelLogs();
     promise.then(r => setItems(r.data.transactions || r.data.advances || r.data.fuelLogs || []))
@@ -96,7 +96,7 @@ export default function CashierPage() {
   useEffect(() => { loadCashier(); loadAllCashiers(); }, []);
   useEffect(() => {
     if (tab === 'transactions' || tab === 'advances' || tab === 'fuel') load();
-  }, [tab]);
+  }, [tab, cashier]);
 
   useEffect(() => {
     if (tab === 'fuel_analytics' && !fuelAnalyticsData) {
@@ -140,6 +140,22 @@ export default function CashierPage() {
     finally { setSaving(false); }
   };
 
+  const deleteTransaction = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this cash transaction? This will adjust the cashier balance.')) return;
+    try {
+      await cashierApi.deleteTransaction(id);
+      loadCashier(); load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete transaction'); }
+  };
+
+  const clearTransactions = async () => {
+    if (!window.confirm(`Are you sure you want to clear all transactions for ${cashier?.name || 'this cashier'}?`)) return;
+    try {
+      await cashierApi.clearTransactions({ cashierId: cashier?.id });
+      loadCashier(); load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to clear transactions'); }
+  };
+
   const doAdvance = async (ev: React.FormEvent) => {
     ev.preventDefault(); setSaving(true);
     try {
@@ -150,6 +166,22 @@ export default function CashierPage() {
       }
     } catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
     finally { setSaving(false); }
+  };
+
+  const deleteAdvance = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this driver advance?')) return;
+    try {
+      await cashierApi.deleteAdvance(id);
+      load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete advance'); }
+  };
+
+  const clearAdvances = async () => {
+    if (!window.confirm('Are you sure you want to clear all driver advances?')) return;
+    try {
+      await cashierApi.clearAdvances();
+      load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to clear advances'); }
   };
 
   const doFuel = async (ev: React.FormEvent) => {
@@ -165,6 +197,22 @@ export default function CashierPage() {
       setFuelModal(false); loadCashier(); load();
     } catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
     finally { setSaving(false); }
+  };
+
+  const deleteFuelLog = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this fuel log?')) return;
+    try {
+      await cashierApi.deleteFuelLog(id);
+      loadCashier(); load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete fuel log'); }
+  };
+
+  const clearFuelLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all fuel logs?')) return;
+    try {
+      await cashierApi.clearFuelLogs();
+      load();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to clear fuel logs'); }
   };
 
   const settleAdvance = async (id: string) => {
@@ -205,6 +253,22 @@ export default function CashierPage() {
     } catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
   };
 
+  const deleteSession = async (sessionId: string) => {
+    if (!window.confirm('Are you sure you want to delete this session record?')) return;
+    try {
+      await cashierApi.deleteSession(sessionId);
+      loadSessions();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete session'); }
+  };
+
+  const clearSessions = async () => {
+    if (!window.confirm(`Are you sure you want to clear all sessions for ${cashier?.name || 'this cashier'}?`)) return;
+    try {
+      await cashierApi.clearSessions({ cashierId: cashier?.id });
+      loadSessions();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to clear sessions'); }
+  };
+
   const doTransfer = async (ev: React.FormEvent) => {
     ev.preventDefault(); setSaving(true);
     try {
@@ -234,6 +298,35 @@ export default function CashierPage() {
     if (reason === null) return;
     try { await cashTransferApi.reject(id, { reason }); loadTransfers(); }
     catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
+  };
+
+  const deleteTransfer = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this cash transfer?')) return;
+    try {
+      await cashTransferApi.delete(id);
+      loadTransfers();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete transfer'); }
+  };
+
+  const clearCashierData = async () => {
+    if (!cashier) return;
+    if (!window.confirm(`Are you sure you want to clear all data and reset balance for cashier "${cashier.name}"?\n\nThis will clear transactions, sessions, and reset the balance to the float amount.`)) return;
+    try {
+      await cashierApi.clearCashierData(cashier.id);
+      loadCashier();
+      load();
+      if (tab === 'sessions') loadSessions();
+      alert('Cashier data cleared and balance reset successfully.');
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to clear cashier data'); }
+  };
+
+  const deleteCashier = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete cashier "${name}"?`)) return;
+    try {
+      await cashierApi.deleteCashier(id);
+      loadAllCashiers();
+      loadCashier();
+    } catch (e: any) { alert(e.response?.data?.error || 'Failed to delete cashier'); }
   };
 
   const doAddCashier = async (ev: React.FormEvent) => {
@@ -267,6 +360,54 @@ export default function CashierPage() {
 
   return (
     <div className="space-y-5">
+      {/* Top Cashier Selector & Reset Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border border-border/60">
+        <div className="flex items-center gap-2">
+          {allCashiers.length > 1 ? (
+            <>
+              <label className="text-xs font-semibold text-muted-foreground uppercase">Active Cashier:</label>
+              <select
+                className="select py-1 px-2.5 text-sm w-56 font-medium"
+                value={cashier?.id || ''}
+                onChange={e => {
+                  const sel = allCashiers.find((c: any) => c.id === e.target.value);
+                  if (sel) setCashier(sel);
+                }}
+              >
+                {allCashiers.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name} {c.location ? `(${c.location})` : ''}</option>
+                ))}
+              </select>
+            </>
+          ) : cashier ? (
+            <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <Landmark className="w-4 h-4 text-primary" /> {cashier.name} {cashier.location ? `(${cashier.location})` : ''}
+            </span>
+          ) : null}
+        </div>
+
+        {cashier && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearCashierData}
+              className="btn-outline text-amber-700 border-amber-300 hover:bg-amber-50 dark:border-amber-800 dark:hover:bg-amber-950/30 py-1.5 px-3 text-xs flex items-center gap-1.5 rounded-lg transition"
+              title="Clear all transactions/sessions and reset balance to float amount"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />Reset & Clear Cashier Data
+            </button>
+            {allCashiers.length > 1 && (
+              <button
+                onClick={() => deleteCashier(cashier.id, cashier.name)}
+                className="btn-outline text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 py-1.5 px-3 text-xs flex items-center gap-1.5 rounded-lg transition"
+                title="Delete this cashier account"
+              >
+                <Trash2 className="w-3.5 h-3.5" />Delete Cashier
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {cashier && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard title="Current Balance" value={`ETB ${cashier.currentBalance?.toLocaleString()}`} icon={DollarSign} color="green" />
@@ -296,22 +437,38 @@ export default function CashierPage() {
               <button onClick={() => { setTxForm({ amount: '', description: '', reference: '', paymentMethod: 'cash', category: 'expense' }); setTxModal('out'); }} className="btn-danger py-1.5 px-3 text-sm">
                 <ArrowUp className="w-4 h-4" />Pay Out
               </button>
+              <button onClick={clearTransactions} className="btn-outline text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 py-1.5 px-3 text-sm flex items-center gap-1.5 rounded-lg" title="Clear all transactions for this cashier">
+                <Trash2 className="w-4 h-4" />Clear Transactions
+              </button>
             </>
           )}
           {tab === 'advances' && (
-            <button onClick={() => { setAdvForm({ driverId: '', amount: '', reason: '' }); setAdvanceModal(true); }} className="btn-primary py-1.5 px-3 text-sm">
-              <ArrowUp className="w-4 h-4" />Give Advance
-            </button>
+            <>
+              <button onClick={() => { setAdvForm({ driverId: '', amount: '', reason: '' }); setAdvanceModal(true); }} className="btn-primary py-1.5 px-3 text-sm">
+                <ArrowUp className="w-4 h-4" />Give Advance
+              </button>
+              <button onClick={clearAdvances} className="btn-outline text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 py-1.5 px-3 text-sm flex items-center gap-1.5 rounded-lg" title="Clear all driver advances">
+                <Trash2 className="w-4 h-4" />Clear Advances
+              </button>
+            </>
           )}
           {tab === 'fuel' && (
-            <button onClick={() => { setFuelForm({ vehicleId: '', liters: '', costPerLiter: '', odometerKm: '', fuelStation: '' }); setFuelModal(true); }} className="btn-primary py-1.5 px-3 text-sm">
-              Log Fuel
-            </button>
+            <>
+              <button onClick={() => { setFuelForm({ vehicleId: '', liters: '', costPerLiter: '', odometerKm: '', fuelStation: '' }); setFuelModal(true); }} className="btn-primary py-1.5 px-3 text-sm">
+                Log Fuel
+              </button>
+              <button onClick={clearFuelLogs} className="btn-outline text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 py-1.5 px-3 text-sm flex items-center gap-1.5 rounded-lg" title="Clear all fuel logs">
+                <Trash2 className="w-4 h-4" />Clear Fuel Logs
+              </button>
+            </>
           )}
           {tab === 'sessions' && cashier && (
             <>
               {!todaySession && <button onClick={openSession} disabled={saving} className="btn-success py-1.5 px-3 text-sm"><Clock className="w-4 h-4" />Open Session</button>}
               {todaySession?.status === 'open' && <button onClick={() => { setCloseForm({ closingBalance: '', notes: '' }); setCloseSessionModal(true); }} className="btn-danger py-1.5 px-3 text-sm"><XCircle className="w-4 h-4" />Close Session</button>}
+              <button onClick={clearSessions} className="btn-outline text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 py-1.5 px-3 text-sm flex items-center gap-1.5 rounded-lg" title="Clear all sessions for this cashier">
+                <Trash2 className="w-4 h-4" />Clear Sessions
+              </button>
             </>
           )}
           {tab === 'transfers' && (
@@ -332,15 +489,15 @@ export default function CashierPage() {
         <div className="table-container">
           <table className="table">
             <thead>
-              {tab === 'transactions' && <tr><th className="th">Date</th><th className="th">Type</th><th className="th">Description</th><th className="th">Category</th><th className="th">Amount</th></tr>}
+              {tab === 'transactions' && <tr><th className="th">Date</th><th className="th">Type</th><th className="th">Description</th><th className="th">Category</th><th className="th">Amount</th><th className="th">Actions</th></tr>}
               {tab === 'advances' && <tr><th className="th">Date</th><th className="th">Driver</th><th className="th">Amount</th><th className="th">Reason</th><th className="th">Status</th><th className="th">Actions</th></tr>}
-              {tab === 'fuel' && <tr><th className="th">Date</th><th className="th">Vehicle</th><th className="th">Liters</th><th className="th">Cost/L</th><th className="th">Total</th><th className="th">Station</th></tr>}
+              {tab === 'fuel' && <tr><th className="th">Date</th><th className="th">Vehicle</th><th className="th">Liters</th><th className="th">Cost/L</th><th className="th">Total</th><th className="th">Station</th><th className="th">Actions</th></tr>}
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="td text-center py-10 text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={7} className="td text-center py-10 text-gray-400">Loading...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={6} className="td text-center py-10 text-gray-400">No records</td></tr>
+                <tr><td colSpan={7} className="td text-center py-10 text-gray-400">No records</td></tr>
               ) : items.map((item: any) => (
                 <tr key={item.id} className="tr">
                   {tab === 'transactions' && <>
@@ -350,6 +507,11 @@ export default function CashierPage() {
                     <td className="td text-gray-500">{item.category}</td>
                     <td className={`td font-semibold ${item.type === 'in' ? 'text-green-700' : 'text-red-600'}`}>
                       ETB {item.amount?.toLocaleString()}
+                    </td>
+                    <td className="td">
+                      <button onClick={() => deleteTransaction(item.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete transaction">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </>}
                   {tab === 'advances' && <>
@@ -369,6 +531,9 @@ export default function CashierPage() {
                         {item.status === 'approved' && (
                           <button onClick={() => settleAdvance(item.id)} className="btn-success py-1 px-2 text-xs">Pay</button>
                         )}
+                        <button onClick={() => deleteAdvance(item.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete advance">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </>}
@@ -379,6 +544,11 @@ export default function CashierPage() {
                     <td className="td">ETB {item.costPerLiter}</td>
                     <td className="td font-semibold">ETB {item.totalCost?.toLocaleString()}</td>
                     <td className="td text-gray-500">{item.fuelStation || '-'}</td>
+                    <td className="td">
+                      <button onClick={() => deleteFuelLog(item.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete fuel log">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </>}
                 </tr>
               ))}
@@ -434,9 +604,14 @@ export default function CashierPage() {
                       </td>
                       <td className="td"><StatusBadge status={s.status} /></td>
                       <td className="td">
-                        {s.status === 'closed' && (
-                          <button onClick={() => reconcileSession(s.id)} className="btn-success py-1 px-2 text-xs">Reconcile</button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {s.status === 'closed' && (
+                            <button onClick={() => reconcileSession(s.id)} className="btn-success py-1 px-2 text-xs">Reconcile</button>
+                          )}
+                          <button onClick={() => deleteSession(s.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete session">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -468,7 +643,7 @@ export default function CashierPage() {
                     <td className="td text-gray-500 text-sm">{t.reason}</td>
                     <td className="td"><StatusBadge status={t.status} /></td>
                     <td className="td">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 items-center">
                         {t.status === 'pending' && (
                           <>
                             <button onClick={() => approveTransfer(t.id)} className="btn-success py-1 px-2 text-xs">Approve</button>
@@ -478,6 +653,9 @@ export default function CashierPage() {
                         {t.status === 'approved' && (
                           <button onClick={() => completeTransfer(t.id)} className="btn-primary py-1 px-2 text-xs">Complete</button>
                         )}
+                        <button onClick={() => deleteTransfer(t.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete transfer">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>

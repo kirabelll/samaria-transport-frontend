@@ -234,6 +234,17 @@ export const cashierApi = {
   reconcileSession: (sessionId: string) => api.put(`/cashier/sessions/${sessionId}/reconcile`),
   dailyReconciliation: (params?: any) => api.get('/cashier/sessions/daily-reconciliation', { params }),
   updateCashier: (id: string, data: any) => api.put(`/cashier/${id}`, data),
+  // Delete & Clear endpoints
+  deleteTransaction: (id: string) => api.delete(`/cashier/transactions/${id}`),
+  clearTransactions: (params?: any) => api.delete('/cashier/transactions', { params }),
+  deleteAdvance: (id: string) => api.delete(`/cashier/driver-advances/${id}`),
+  clearAdvances: (params?: any) => api.delete('/cashier/driver-advances', { params }),
+  deleteFuelLog: (id: string) => api.delete(`/cashier/fuel-logs/${id}`),
+  clearFuelLogs: (params?: any) => api.delete('/cashier/fuel-logs', { params }),
+  deleteSession: (sessionId: string) => api.delete(`/cashier/sessions/${sessionId}`),
+  clearSessions: (params?: any) => api.delete('/cashier/sessions', { params }),
+  deleteCashier: (id: string) => api.delete(`/cashier/${id}`),
+  clearCashierData: (id: string) => api.post(`/cashier/${id}/clear`),
 };
 
 export const cashTransferApi = {
@@ -243,6 +254,8 @@ export const cashTransferApi = {
   approve: (id: string) => api.put(`/cash-transfers/${id}/approve`),
   complete: (id: string) => api.put(`/cash-transfers/${id}/complete`),
   reject: (id: string, data?: any) => api.put(`/cash-transfers/${id}/reject`, data),
+  delete: (id: string) => api.delete(`/cash-transfers/${id}`),
+  clear: () => api.delete('/cash-transfers'),
 };
 
 // ── Rental ───────────────────────────────────────────────
