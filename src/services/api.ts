@@ -77,6 +77,7 @@ export const employeeApi = {
   payroll: (id: string) => api.get(`/employees/${id}/payroll`),
   trips: (id: string) => api.get(`/employees/${id}/trips`),
   attendance: (id: string, params?: any) => api.get(`/employees/${id}/attendance`, { params }),
+  delete: (id: string) => api.delete(`/employees/${id}`),
 };
 
 // ── Customers ────────────────────────────────────────────
@@ -368,6 +369,8 @@ export const driverLedgerApi = {
   get: (driverId: string) => api.get(`/driver-ledger/${driverId}`),
   addEntry: (driverId: string, data: any) => api.post(`/driver-ledger/${driverId}`, data),
   sync: (driverId: string) => api.post(`/driver-ledger/${driverId}/sync`),
+  deleteEntry: (entryId: string) => api.delete(`/driver-ledger/entry/${entryId}`),
+  clearLedger: (driverId: string) => api.delete(`/driver-ledger/${driverId}`),
 };
 
 // ── Approvals ───────────────────────────────────────────

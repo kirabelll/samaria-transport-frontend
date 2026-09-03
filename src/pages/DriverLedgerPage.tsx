@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, RefreshCw, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { BookOpen, RefreshCw, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { driverLedgerApi } from '../services/api';
 import { formatDualDate } from '../utils/ethCalendar';
 import Modal from '../components/ui/Modal';
@@ -35,6 +35,39 @@ export default function DriverLedgerPage() {
     } catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
   };
 
+  const clearLedger = async (driverId: string, driverName?: string) => {
+    if (!window.confirm(`Are you sure you want to clear/delete all ledger entries for ${driverName || 'this driver'}?`)) return;
+    try {
+      await driverLedgerApi.clearLedger(driverId);
+      if (selected && (selected.driver?.id === driverId || selected.entries?.[0]?.driverId === driverId)) {
+        loadLedger(driverId);
+      }
+      loadDrivers();
+    } catch (e: any) {
+      if (e.response?.status === 404) {
+        alert('The remote server (api.novahrsm.com) does not have the DELETE route deployed yet. Please deploy the updated backend or point frontend/.env to your local backend.');
+        return;
+      }
+      alert(e.response?.data?.error || 'Failed to clear ledger');
+    }
+  };
+
+  const deleteEntry = async (entryId: string) => {
+    if (!window.confirm('Are you sure you want to delete this ledger entry?')) return;
+    try {
+      await driverLedgerApi.deleteEntry(entryId);
+      const driverId = selected?.driver?.id || selected?.entries?.[0]?.driverId;
+      if (driverId) loadLedger(driverId);
+      loadDrivers();
+    } catch (e: any) {
+      if (e.response?.status === 404) {
+        alert('The remote server (api.novahrsm.com) does not have the DELETE route deployed yet. Please deploy the updated backend or point frontend/.env to your local backend.');
+        return;
+      }
+      alert(e.response?.data?.error || 'Failed to delete ledger entry');
+    }
+  };
+
   const addEntry = async (ev: React.FormEvent) => {
     ev.preventDefault(); setSaving(true);
     try {
@@ -65,7 +98,10 @@ export default function DriverLedgerPage() {
                   <td className="td text-red-600">ETB {d.totalDebits?.toLocaleString()}</td>
                   <td className={`td font-bold ${d.balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>ETB {d.balance?.toLocaleString()}</td>
                   <td className="td">
-                    <button onClick={(e) => { e.stopPropagation(); syncLedger(d.id); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Sync"><RefreshCw className="w-4 h-4" /></button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={(e) => { e.stopPropagation(); syncLedger(d.id); }} className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded" title="Sync Ledger"><RefreshCw className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); clearLedger(d.id, `${d.firstName} ${d.lastName}`); }} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded" title="Clear Ledger Entries"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -80,6 +116,9 @@ export default function DriverLedgerPage() {
               <h3 className="text-lg font-bold">{selected.driver?.firstName} {selected.driver?.lastName} <span className="text-sm text-gray-400">({selected.driver?.empNumber})</span></h3>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => clearLedger(selected.driver?.id || selected.entries?.[0]?.driverId, `${selected.driver?.firstName} ${selected.driver?.lastName}`)} className="btn-outline text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-950/30 flex items-center gap-1 py-1.5 px-3 text-sm rounded-lg transition" title="Clear all ledger entries">
+                <Trash2 className="w-4 h-4" />Clear Ledger
+              </button>
               <button onClick={() => syncLedger(selected.driver?.id)} className="btn-secondary py-1.5 px-3 text-sm"><RefreshCw className="w-4 h-4" />Sync</button>
               <button onClick={() => { setForm({ type: 'debit', category: 'advance', amount: '', description: '' }); setAddModal(true); }} className="btn-primary py-1.5 px-3 text-sm"><Plus className="w-4 h-4" />Add Entry</button>
             </div>
@@ -93,9 +132,9 @@ export default function DriverLedgerPage() {
 
           <div className="table-container">
             <table className="table">
-              <thead><tr><th className="th">Date</th><th className="th">Type</th><th className="th">Category</th><th className="th">Description</th><th className="th">Amount</th><th className="th">Balance</th></tr></thead>
+              <thead><tr><th className="th">Date</th><th className="th">Type</th><th className="th">Category</th><th className="th">Description</th><th className="th">Amount</th><th className="th">Balance</th><th className="th">Actions</th></tr></thead>
               <tbody>
-                {entries.length === 0 ? <tr><td colSpan={6} className="td text-center py-10 text-gray-400">No entries - click Sync to import</td></tr>
+                {entries.length === 0 ? <tr><td colSpan={7} className="td text-center py-10 text-gray-400">No entries - click Sync to import</td></tr>
                 : entries.map(e => (
                   <tr key={e.id} className="tr">
                     <td className="td text-sm">{formatDualDate(e.date)}</td>
@@ -104,6 +143,11 @@ export default function DriverLedgerPage() {
                     <td className="td text-sm">{e.description}</td>
                     <td className={`td font-semibold ${e.type === 'credit' ? 'text-green-700' : 'text-red-600'}`}>{e.type === 'credit' ? '+' : '-'} ETB {e.amount?.toLocaleString()}</td>
                     <td className={`td ${e.balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>ETB {e.balance?.toLocaleString()}</td>
+                    <td className="td">
+                      <button onClick={() => deleteEntry(e.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition" title="Delete entry">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
