@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, CheckCircle, XCircle, Eye, FileText, Truck, Edit3, AlertTriangle } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, Eye, FileText, Truck, Edit3, AlertTriangle, Search } from 'lucide-react';
 import { orderApi, customerApi, orderRevisionApi, penaltyApi } from '../services/api';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -16,6 +16,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [saving, setSaving] = useState(false);
@@ -100,10 +101,34 @@ export default function OrdersPage() {
 
   const STATUSES = ['submitted','approved','scheduled','dispatched','in_transit','delivered','invoiced','paid','rejected'];
 
+  const filteredOrders = orders.filter((o: any) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
+    return (
+      (o.orderNumber && String(o.orderNumber).toLowerCase().includes(term)) ||
+      (o.poNumber && String(o.poNumber).toLowerCase().includes(term)) ||
+      (o.customer?.companyName && String(o.customer.companyName).toLowerCase().includes(term)) ||
+      (o.pickupLocation && String(o.pickupLocation).toLowerCase().includes(term)) ||
+      (o.deliveryLocation && String(o.deliveryLocation).toLowerCase().includes(term)) ||
+      String(o.quantity).includes(term) ||
+      String(o.totalDelivered).includes(term)
+    );
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search order #, customer, PO..."
+              className="input pl-9 w-60 text-sm"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
           <select className="select w-40" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
             <option value="">All Status</option>
             {STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
@@ -131,9 +156,9 @@ export default function OrdersPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={10} className="td text-center py-10 text-gray-400">Loading...</td></tr>
-            ) : orders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <tr><td colSpan={10} className="td text-center py-10 text-gray-400">No orders found</td></tr>
-            ) : orders.map((o:any) => (
+            ) : filteredOrders.map((o:any) => (
               <tr key={o.id} className="tr cursor-pointer" onClick={()=>setDetail(o)}>
                 <td className="td font-mono text-xs font-semibold text-blue-700">{o.orderNumber}</td>
                 <td className="td">{o.customer?.companyName}</td>
