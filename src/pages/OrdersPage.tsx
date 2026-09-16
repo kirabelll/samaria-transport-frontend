@@ -3,6 +3,7 @@ import { Plus, CheckCircle, XCircle, Eye, FileText, Truck, Edit3, AlertTriangle,
 import { orderApi, customerApi, orderRevisionApi, penaltyApi } from '../services/api';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
+import Pagination from '../components/ui/Pagination';
 import { formatDualDate } from '../utils/ethCalendar';
 import DateTimeInput from '../components/ui/DateTimeInput';
 
@@ -12,6 +13,9 @@ const empty = { customerId:'', orderType:'cement', quantity:'', materialType:'',
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
@@ -39,14 +43,27 @@ export default function OrdersPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      orderApi.list({ status: filterStatus||undefined, orderType: filterType||undefined }),
+      orderApi.list({
+        status: filterStatus || undefined,
+        orderType: filterType || undefined,
+        search: searchTerm.trim() || undefined,
+        page,
+        limit,
+      }),
       customerApi.list(),
     ]).then(([oRes, cRes]) => {
       setOrders(oRes.data.orders || []);
+      setTotal(oRes.data.total ?? (oRes.data.orders?.length || 0));
       setCustomers(cRes.data.customers || []);
     }).catch(console.error).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, [filterStatus, filterType]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      load();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [filterStatus, filterType, searchTerm, page, limit]);
 
   const save = async (ev: React.FormEvent) => {
     ev.preventDefault(); setSaving(true); setError('');
@@ -101,20 +118,6 @@ export default function OrdersPage() {
 
   const STATUSES = ['submitted','approved','scheduled','dispatched','in_transit','delivered','invoiced','paid','rejected'];
 
-  const filteredOrders = orders.filter((o: any) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase().trim();
-    return (
-      (o.orderNumber && String(o.orderNumber).toLowerCase().includes(term)) ||
-      (o.poNumber && String(o.poNumber).toLowerCase().includes(term)) ||
-      (o.customer?.companyName && String(o.customer.companyName).toLowerCase().includes(term)) ||
-      (o.pickupLocation && String(o.pickupLocation).toLowerCase().includes(term)) ||
-      (o.deliveryLocation && String(o.deliveryLocation).toLowerCase().includes(term)) ||
-      String(o.quantity).includes(term) ||
-      String(o.totalDelivered).includes(term)
-    );
-  });
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-3 items-center justify-between">
@@ -126,17 +129,23 @@ export default function OrdersPage() {
               placeholder="Search order #, customer, PO..."
               className="input pl-9 w-60 text-sm"
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
             />
           </div>
-          <select className="select w-40" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+          <select className="select w-40" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}>
             <option value="">All Status</option>
             {STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="select w-36" value={filterType} onChange={e=>setFilterType(e.target.value)}>
+          <select className="select w-36" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }}>
             <option value="">All Types</option>
             <option value="cement">Cement</option>
             <option value="gravel">Gravel</option>
+          </select>
+          <select className="select w-28 text-xs" value={limit} onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}>
+            <option value={10}>10 / page</option>
+            <option value={20}>20 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
           </select>
         </div>
         <button onClick={()=>{ setForm(empty); setError(''); setModal(true); }} className="btn-primary">
@@ -155,10 +164,10 @@ export default function OrdersPage() {
           </tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="td text-center py-10 text-gray-400">Loading...</td></tr>
-            ) : filteredOrders.length === 0 ? (
+              <tr><td colSpan={10} className="td text-center py-10 text-gray-400">Loading orders...</td></tr>
+            ) : orders.length === 0 ? (
               <tr><td colSpan={10} className="td text-center py-10 text-gray-400">No orders found</td></tr>
-            ) : filteredOrders.map((o:any) => (
+            ) : orders.map((o:any) => (
               <tr key={o.id} className="tr cursor-pointer" onClick={()=>setDetail(o)}>
                 <td className="td font-mono text-xs font-semibold text-blue-700">{o.orderNumber}</td>
                 <td className="td">{o.customer?.companyName}</td>
@@ -191,6 +200,7 @@ export default function OrdersPage() {
             ))}
           </tbody>
         </table>
+        <Pagination total={total} page={page} limit={limit} onChange={setPage} />
       </div>
 
       {/* Create Order Modal */}
