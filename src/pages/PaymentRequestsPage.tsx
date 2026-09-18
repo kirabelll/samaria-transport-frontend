@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Send, CheckCircle, XCircle, DollarSign, Edit, Trash2, Eye } from 'lucide-react';
-import api, { vehicleApi } from '../services/api';
+import { Plus, Send, CheckCircle, XCircle, DollarSign, Edit, Trash2, Eye, Search, Sparkles, Check, RotateCcw, RefreshCw } from 'lucide-react';
+import api, { vehicleApi, paymentRequestApi } from '../services/api';
 import { formatDualDate } from '../utils/ethCalendar';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -20,7 +20,7 @@ const emptyForm = {
   payee: '',
   amount: '',
   description: '',
-  referenceType: '',
+  referenceType: 'trip',
   referenceId: '',
   dueDate: '',
   payeeBank: '',
@@ -44,13 +44,20 @@ export default function PaymentRequestsPage() {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [detailItem, setDetailItem] = useState<any>(null);
 
+  // Dynamic source data selection states
+  const [sourceItems, setSourceItems] = useState<any[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceSearch, setSourceSearch] = useState('');
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [showSourcePicker, setShowSourcePicker] = useState(true);
+
   const load = () => {
     setLoading(true);
     const params: any = {};
     if (filter !== 'all') params.status = filter;
     Promise.all([
-      api.get('/payment-requests', { params }),
-      api.get('/payment-requests/stats'),
+      paymentRequestApi.list(params),
+      paymentRequestApi.stats(),
     ])
       .then(([listRes, statsRes]) => {
         setItems(listRes.data.requests || listRes.data.paymentRequests || []);
@@ -68,9 +75,74 @@ export default function PaymentRequestsPage() {
       .catch(() => setVehicles([]));
   }, []);
 
+  const fetchSourceData = (type: string, q = '') => {
+    setSourceLoading(true);
+    paymentRequestApi.sourceData({ type, search: q })
+      .then(res => {
+        setSourceItems(res.data.items || []);
+      })
+      .catch(() => {
+        setSourceItems([]);
+      })
+      .finally(() => setSourceLoading(false));
+  };
+
+  useEffect(() => {
+    if (modal && !reviewing) {
+      fetchSourceData(form.paymentType, sourceSearch);
+    }
+  }, [modal, form.paymentType, sourceSearch]);
+
+  const handlePaymentTypeChange = (newType: string) => {
+    setSelectedSourceId(null);
+    let defaultDept = form.department;
+    let defaultRefType = form.referenceType;
+    if (newType === 'advance') { defaultDept = 'fleet'; defaultRefType = 'trip'; }
+    else if (newType === 'fuel') { defaultDept = 'fleet'; defaultRefType = 'trip'; }
+    else if (newType === 'garage') { defaultDept = 'workshop'; defaultRefType = 'work_order'; }
+    else if (newType === 'spare_part') { defaultDept = 'store'; defaultRefType = 'po'; }
+    else if (newType === 'salary') { defaultDept = 'hr'; defaultRefType = 'payroll'; }
+    else if (newType === 'rental') { defaultDept = 'fleet'; defaultRefType = 'trip'; }
+    else if (newType === 'po_payment') { defaultDept = 'store'; defaultRefType = 'po'; }
+    else if (newType === 'settlement') { defaultDept = 'admin'; defaultRefType = 'settlement'; }
+
+    setForm((f: any) => ({
+      ...f,
+      paymentType: newType,
+      department: defaultDept,
+      referenceType: defaultRefType,
+    }));
+  };
+
+  const handleSelectSourceItem = (item: any) => {
+    setSelectedSourceId(item.id);
+    setForm((f: any) => ({
+      ...f,
+      department: item.department || f.department,
+      payee: item.payee || f.payee,
+      amount: item.amount != null ? String(item.amount) : f.amount,
+      description: item.description || f.description,
+      referenceType: item.referenceType || f.referenceType || 'trip',
+      referenceId: item.referenceId || f.referenceId,
+      vehicleId: item.vehicleId || (VEHICLE_LINKED.includes(form.paymentType) ? f.vehicleId : ''),
+      dueDate: item.dueDate ? item.dueDate.slice(0, 10) : f.dueDate,
+      payeeBank: item.payeeBank || f.payeeBank,
+      payeeAccountHolder: item.payeeAccountHolder || f.payeeAccountHolder,
+      payeeAccountNumber: item.payeeAccountNumber || f.payeeAccountNumber,
+      paymentMethod: item.paymentMethod || f.paymentMethod || 'cash',
+    }));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedSourceId(null);
+  };
+
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...emptyForm });
+    setSelectedSourceId(null);
+    setSourceSearch('');
+    setShowSourcePicker(true);
     setReviewing(false);
     setError('');
     setModal(true);
@@ -78,6 +150,9 @@ export default function PaymentRequestsPage() {
 
   const openEdit = (item: any) => {
     setEditingId(item.id);
+    setSelectedSourceId(null);
+    setSourceSearch('');
+    setShowSourcePicker(false);
     setForm({
       department: item.department || 'fleet',
       paymentType: item.paymentType || 'advance',
@@ -279,13 +354,14 @@ export default function PaymentRequestsPage() {
 
       {/* Create / Edit modal */}
       {modal && !reviewing && (
-        <Modal title={editingId ? 'Edit Draft Payment Request' : 'New Payment Request (Draft)'} onClose={() => setModal(false)} size="max-w-2xl">
-          <form onSubmit={e => { e.preventDefault(); proceedToReview(); }} className="space-y-3">
+        <Modal title={editingId ? 'Edit Draft Payment Request' : 'New Payment Request (Draft)'} onClose={() => setModal(false)} size="max-w-3xl">
+          <form onSubmit={e => { e.preventDefault(); proceedToReview(); }} className="space-y-4">
             {error && <div className="p-2 bg-red-50 text-red-700 text-sm rounded">{error}</div>}
             <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-              💡 This is a <strong>draft</strong>. You can review and edit all fields before submitting for approval.
+              💡 This is a <strong>draft</strong>. You can select an existing record below to auto-fill fields or type them manually before submitting for approval.
             </div>
 
+            {/* Department & Payment Type */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Department *</label>
@@ -295,16 +371,128 @@ export default function PaymentRequestsPage() {
               </div>
               <div>
                 <label className="label">Payment Type *</label>
-                <select className="select" value={form.paymentType} onChange={e => setForm((f: any) => ({ ...f, paymentType: e.target.value }))}>
+                <select className="select font-medium text-blue-700 bg-blue-50/50 border-blue-300" value={form.paymentType} onChange={e => handlePaymentTypeChange(e.target.value)}>
                   {PAYMENT_TYPES.map(t => (<option key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>))}
                 </select>
               </div>
             </div>
 
+            {/* Source Records Selector based on selected paymentType */}
+            <div className="border border-blue-200 bg-blue-50/40 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                    Select from {form.paymentType.replace(/_/g, ' ')} Records ({sourceItems.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedSourceId && (
+                    <button
+                      type="button"
+                      onClick={handleClearSelection}
+                      className="text-[11px] text-gray-500 hover:text-red-600 flex items-center gap-1 underline"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Clear selection
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowSourcePicker(!showSourcePicker)}
+                    className="text-xs text-blue-700 font-medium hover:underline"
+                  >
+                    {showSourcePicker ? 'Hide List' : 'Show List'}
+                  </button>
+                </div>
+              </div>
+
+              {showSourcePicker && (
+                <>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      className="input pl-8 py-1.5 text-xs bg-white"
+                      placeholder={`Filter ${form.paymentType.replace(/_/g, ' ')} records (name, reference, plate, station, etc.)...`}
+                      value={sourceSearch}
+                      onChange={e => setSourceSearch(e.target.value)}
+                    />
+                  </div>
+
+                  {sourceLoading ? (
+                    <div className="p-4 text-center text-xs text-gray-500 bg-white rounded border border-dashed flex items-center justify-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                      Loading {form.paymentType.replace(/_/g, ' ')} candidate records...
+                    </div>
+                  ) : sourceItems.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-gray-500 bg-white rounded border border-dashed">
+                      No specific records found for "{form.paymentType.replace(/_/g, ' ')}". You can enter details manually below.
+                    </div>
+                  ) : (
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                      {sourceItems.map(item => {
+                        const isSelected = selectedSourceId === item.id;
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => handleSelectSourceItem(item)}
+                            className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-400/40 shadow-sm'
+                                : 'bg-white hover:bg-gray-50 border-gray-200 hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {isSelected ? (
+                                  <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0">
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </div>
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0" />
+                                )}
+                                <span className="font-semibold text-xs text-gray-900 truncate">
+                                  {item.title}
+                                </span>
+                                {item.badge && (
+                                  <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-gray-100 text-gray-700 border border-gray-200 flex-shrink-0 capitalize">
+                                    {item.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-bold text-emerald-700 flex-shrink-0">
+                                {fmt(item.amount)}
+                              </div>
+                            </div>
+
+                            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 pl-6">
+                              <span className="truncate">{item.subtitle}</span>
+                              <span className="font-mono text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 flex-shrink-0 ml-2">
+                                {item.referenceType?.toUpperCase()}: {item.referenceId}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-blue-700 flex items-center justify-between pt-1">
+                    <span>💡 Clicking any record above auto-populates Payee, Amount, Ref ID, Vehicle, and Bank info.</span>
+                    {selectedSourceId && (
+                      <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                        <Check className="w-3 h-3 stroke-[3]" /> Linked & Pre-filled
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
             {showVehicleField && (
-              <div className="p-2 bg-amber-50 border border-amber-200 rounded">
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
                 <label className="label text-amber-900">Vehicle (Plate Number)</label>
-                <select className="select" value={form.vehicleId} onChange={e => setForm((f: any) => ({ ...f, vehicleId: e.target.value }))}>
+                <select className="select bg-white" value={form.vehicleId} onChange={e => setForm((f: any) => ({ ...f, vehicleId: e.target.value }))}>
                   <option value="">— Select vehicle —</option>
                   {vehicles.map(v => (
                     <option key={v.id} value={v.id}>{v.plateNumber} · {v.make} {v.model}</option>
