@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Send, CheckCircle, XCircle, DollarSign, Edit, Trash2, Eye, Search, Sparkles, Check, RotateCcw, RefreshCw } from 'lucide-react';
-import api, { vehicleApi, paymentRequestApi } from '../services/api';
+import { Plus, Send, CheckCircle, XCircle, DollarSign, Edit, Trash2, Eye, Search, Sparkles, Check, RotateCcw, RefreshCw, Wallet, Copy, AlertTriangle, Building2, User, CreditCard } from 'lucide-react';
+import api, { vehicleApi, paymentRequestApi, cashierApi, authApi } from '../services/api';
 import { formatDualDate } from '../utils/ethCalendar';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -50,6 +50,22 @@ export default function PaymentRequestsPage() {
   const [sourceSearch, setSourceSearch] = useState('');
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [showSourcePicker, setShowSourcePicker] = useState(true);
+
+  // Pay Modal states
+  const [payItem, setPayItem] = useState<any>(null);
+  const [cashiersList, setCashiersList] = useState<any[]>([]);
+  const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+  const [customCashierInput, setCustomCashierInput] = useState<string>('');
+  const [useCustomCashier, setUseCustomCashier] = useState<boolean>(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [loadingCashiers, setLoadingCashiers] = useState(false);
+  const [copiedCashierId, setCopiedCashierId] = useState(false);
+
+  // Reject Modal states
+  const [rejectItem, setRejectItem] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -224,19 +240,75 @@ export default function PaymentRequestsPage() {
     catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
   };
 
-  const rejectRequest = async (id: string) => {
-    const reason = prompt('Rejection reason:');
-    if (!reason) return;
-    try { await api.put(`/payment-requests/${id}/reject`, { reason }); load(); }
-    catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
+  const openReject = (item: any) => {
+    setRejectItem(item);
+    setRejectReason('');
   };
 
-  const payRequest = async (id: string) => {
-    const cashierId = prompt('Cashier ID (leave blank for self):');
+  const handleExecuteReject = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!rejectItem || !rejectReason.trim()) return;
+    setRejecting(true);
     try {
-      await api.put(`/payment-requests/${id}/pay`, { cashierId: cashierId || undefined });
+      await api.put(`/payment-requests/${rejectItem.id}/reject`, { reason: rejectReason.trim() });
+      setRejectItem(null);
       load();
-    } catch (e: any) { alert(e.response?.data?.error || 'Failed'); }
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Failed to reject payment request');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const openPayModal = async (item: any) => {
+    setPayItem(item);
+    setPayError('');
+    setUseCustomCashier(false);
+    setCustomCashierInput('');
+    setLoadingCashiers(true);
+    try {
+      const [cashiersRes, meRes] = await Promise.all([
+        cashierApi.list(),
+        authApi.me().catch(() => null),
+      ]);
+      const list = cashiersRes.data.cashiers || [];
+      setCashiersList(list);
+
+      // Match user's linked cashier or pick first active
+      const userCashierId = meRes?.data?.user?.cashierId || meRes?.data?.user?.cashierRecord?.id;
+      const matched = list.find((c: any) => c.id === userCashierId || c.userId === meRes?.data?.user?.id);
+      if (matched) {
+        setSelectedCashierId(matched.id);
+      } else if (list.length > 0) {
+        setSelectedCashierId(list[0].id);
+      } else {
+        setSelectedCashierId('');
+      }
+    } catch (err: any) {
+      setPayError(err.response?.data?.error || 'Failed to load cashiers list');
+    } finally {
+      setLoadingCashiers(false);
+    }
+  };
+
+  const handleExecutePay = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!payItem) return;
+    setPaying(true);
+    setPayError('');
+
+    const targetCashierId = useCustomCashier ? customCashierInput.trim() : selectedCashierId;
+    try {
+      await api.put(`/payment-requests/${payItem.id}/pay`, {
+        cashierId: targetCashierId || undefined,
+      });
+      setPayItem(null);
+      load();
+    } catch (err: any) {
+      setPayError(err.response?.data?.error || 'Payment execution failed');
+    } finally {
+      setPaying(false);
+    }
   };
 
   const deleteDraft = async (id: string) => {
@@ -249,6 +321,9 @@ export default function PaymentRequestsPage() {
     n != null ? `ETB ${Number(n).toLocaleString('en', { minimumFractionDigits: 2 })}` : 'ETB 0.00';
 
   const showVehicleField = VEHICLE_LINKED.includes(form.paymentType);
+
+  const selectedCashierObj = cashiersList.find((c: any) => c.id === selectedCashierId);
+  const isBalanceSufficient = selectedCashierObj ? (selectedCashierObj.currentBalance >= (payItem?.amount || 0)) : true;
 
   return (
     <div className="space-y-5">
@@ -334,13 +409,13 @@ export default function PaymentRequestsPage() {
                         <button onClick={() => approveRequest(item.id)} className="btn-success py-1 px-2 text-xs" title="Approve">
                           <CheckCircle className="w-3 h-3" />Approve
                         </button>
-                        <button onClick={() => rejectRequest(item.id)} className="btn-danger py-1 px-2 text-xs" title="Reject">
+                        <button onClick={() => openReject(item)} className="btn-danger py-1 px-2 text-xs" title="Reject">
                           <XCircle className="w-3 h-3" />Reject
                         </button>
                       </>
                     )}
                     {item.status === 'approved' && (
-                      <button onClick={() => payRequest(item.id)} className="btn-success py-1 px-2 text-xs" title="Pay">
+                      <button onClick={() => openPayModal(item)} className="btn-success py-1 px-2 text-xs flex items-center gap-1" title="Pay with Cashier">
                         <DollarSign className="w-3 h-3" />Pay
                       </button>
                     )}
@@ -614,6 +689,199 @@ export default function PaymentRequestsPage() {
               Draft saved. Click <strong>Submit</strong> on the list row to send for approval.
             </p>
           </div>
+        </Modal>
+      )}
+
+      {/* Pay Request Modal with Cashier Selection */}
+      {payItem && (
+        <Modal title={`Execute Payment: ${payItem.requestNumber || 'Request'}`} onClose={() => setPayItem(null)} size="max-w-xl">
+          <form onSubmit={handleExecutePay} className="space-y-4">
+            {payError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-600" />
+                <span>{payError}</span>
+              </div>
+            )}
+
+            {/* Payment Summary Box */}
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Payment Amount</span>
+                  <div className="text-2xl font-black text-emerald-950 mt-0.5">{fmt(payItem.amount)}</div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs text-emerald-800">Method</span>
+                  <div className="text-xs font-bold text-emerald-950 uppercase tracking-wide px-2 py-1 bg-white/80 rounded border border-emerald-200 mt-0.5">
+                    {(payItem.paymentMethod || 'cash').replace(/_/g, ' ')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-emerald-200/60 pt-2.5 text-emerald-900">
+                <div><span className="text-emerald-700">Payee:</span> <strong>{payItem.payee}</strong></div>
+                <div><span className="text-emerald-700">Dept:</span> <strong className="capitalize">{payItem.department}</strong></div>
+                <div className="col-span-2 truncate"><span className="text-emerald-700">Description:</span> {payItem.description}</div>
+                {payItem.payeeBank && (
+                  <div className="col-span-2 bg-white/70 p-2 rounded text-[11px] border border-emerald-200/60 flex items-center justify-between">
+                    <span><strong>Bank:</strong> {payItem.payeeBank} · {payItem.payeeAccountNumber}</span>
+                    <span><strong>Holder:</strong> {payItem.payeeAccountHolder}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cashier Selection Section */}
+            <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Wallet className="w-4 h-4 text-blue-600" />
+                  Paying Cashier Drawer / Account *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setUseCustomCashier(!useCustomCashier)}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline font-medium"
+                >
+                  {useCustomCashier ? '← Choose from Cashier list' : 'Enter ID / Code manually'}
+                </button>
+              </div>
+
+              {loadingCashiers ? (
+                <div className="py-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" /> Loading Cashiers...
+                </div>
+              ) : useCustomCashier ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-600">Enter Cashier UUID, User ID, or Cashier Code (e.g. CSH-1001):</label>
+                  <input
+                    type="text"
+                    className="input bg-white text-sm"
+                    placeholder="e.g. CSH-1024 or 3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    value={customCashierInput}
+                    onChange={e => setCustomCashierInput(e.target.value)}
+                    required
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    💡 Cashier IDs and Codes can be checked on the <span className="font-semibold text-gray-700">Users Page</span> under each Cashier account.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <select
+                    className="select bg-white text-sm font-medium"
+                    value={selectedCashierId}
+                    onChange={e => setSelectedCashierId(e.target.value)}
+                    required
+                  >
+                    <option value="">— Select paying cashier drawer —</option>
+                    {cashiersList.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.code ? `(${c.code})` : ''} {c.location ? `· ${c.location}` : ''} — Available: ETB {Number(c.currentBalance || 0).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedCashierObj && (
+                    <div className="p-3 bg-white rounded-lg border border-gray-200 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-gray-900">{selectedCashierObj.name}</span>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                          isBalanceSufficient ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+                        }`}>
+                          Balance: ETB {Number(selectedCashierObj.currentBalance).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-gray-500 font-mono text-[11px]">
+                        <span>ID: {selectedCashierObj.id}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedCashierObj.id);
+                            setCopiedCashierId(true);
+                            setTimeout(() => setCopiedCashierId(false), 2000);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 p-0.5"
+                          title="Copy Cashier ID"
+                        >
+                          {copiedCashierId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                        {selectedCashierObj.code && (
+                          <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 font-semibold">
+                            Code: {selectedCashierObj.code}
+                          </span>
+                        )}
+                      </div>
+
+                      {!isBalanceSufficient && (
+                        <div className="text-[11px] text-red-600 font-medium pt-1 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                          Insufficient funds! Required {fmt(payItem.amount)}, available {fmt(selectedCashierObj.currentBalance)}.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setPayItem(null)}
+                className="btn-secondary text-xs"
+                disabled={paying}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary text-xs flex items-center gap-1.5"
+                disabled={paying || (!useCustomCashier && (!selectedCashierId || !isBalanceSufficient))}
+              >
+                {paying ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Processing Payment...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Confirm & Execute Payment
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Reject Reason Modal */}
+      {rejectItem && (
+        <Modal title={`Reject Payment Request: ${rejectItem.requestNumber || ''}`} onClose={() => setRejectItem(null)} size="max-w-md">
+          <form onSubmit={handleExecuteReject} className="space-y-4">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+              Please enter the reason for rejecting this payment request for <strong>{rejectItem.payee}</strong> ({fmt(rejectItem.amount)}).
+            </div>
+            <div>
+              <label className="label">Rejection Reason *</label>
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="e.g. Budget exceeded, missing supporting documents, incorrect amount..."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setRejectItem(null)} className="btn-secondary text-xs" disabled={rejecting}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-danger text-xs flex items-center gap-1" disabled={rejecting || !rejectReason.trim()}>
+                {rejecting ? 'Rejecting...' : 'Reject Request'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 
